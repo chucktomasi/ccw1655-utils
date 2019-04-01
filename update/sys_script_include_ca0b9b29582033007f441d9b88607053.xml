@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_snc_ccw1655.Util</api_name>
+        <client_callable>false</client_callable>
+        <description/>
+        <name>Util</name>
+        <script><![CDATA[var Util = Class.create();
+QUEUE_TABLE  = 'x_snc_iot_queue';
+DEVICE_TABLE = 'x_snc_porter_device';
+
+Util.prototype = {
+	initialize: function() {
+	},
+
+	/*
+	 * get the next ready request for this device
+	 *    If none found, return null
+	 *
+	 */
+
+	checkRequest : function(deviceName) {
+
+		var qGr = new GlideRecord(QUEUE_TABLE);
+
+		qGr.addQuery('device', deviceName);
+		qGr.addQuery('state', 'ready');
+		qGr.orderBy('sys_created_on');
+		qGr.setLimit(1);
+		qGr.query();
+
+		if (qGr.next()) {
+			qGr.setValue('state', 'processing');
+			qGr.update();
+			return qGr;
+		}
+
+		return;
+	},
+
+	createInput : function(source, payload) {
+
+		var qGr = new GlideRecord(QUEUE_TABLE);
+		var state = 'processed';
+		var sourceStr = source.toString();
+		var gdt = new GlideDateTime();
+
+		if (payload.status == 'ERROR' || sourceStr == "ERROR") {	
+			state = 'error';
+		}
+
+		gs.info('createInput(): payload=' + JSON.stringify(payload, null, 4));
+		gs.info('createInput(): sourceStr=' + sourceStr + ' ' + typeof source);
+
+		qGr.newRecord();
+		qGr.setValue('queue', 'input');
+		qGr.setValue('source', sourceStr);
+		qGr.setValue('payload', JSON.stringify(payload));
+		qGr.setValue('state', state);
+		qGr.setValue('processed', gdt);
+		qGr.setValue('device', payload.device);
+		qGr.insert();
+
+		if (sourceStr != "ERROR") {
+			this._setSourceState(sourceStr, state, gdt);
+		}
+
+	},
+	
+	inputRecordExists : function(outputNumber) {
+		
+		var inputGr = new GlideRecord(QUEUE_TABLE);
+		inputGr.addQuery('source', outputNumber);
+		inputGr.addQuery('queue', 'input');
+		inputGr.query();
+		
+		return inputGr.hasNext();
+		
+	},
+
+	_setSourceState : function(source, state, gdt) {
+
+		var qGr = new GlideRecord(QUEUE_TABLE);
+		if (qGr.get('number', source)) {
+			qGr.setValue('processed', gdt);
+			qGr.setValue('state', state);
+			qGr.update();
+		} else {
+			gs.error('Could not read ' + source + ' from ' + QUEUE_TABLE);
+		}
+	},
+
+	createOutput : function(deviceGr) {
+
+		var payload = deviceGr.action.payload.toString();
+		var qGr = new GlideRecord(QUEUE_TABLE);
+
+		qGr.newRecord();
+		qGr.setValue('state', 'ready');
+		qGr.setValue('queue', 'output');
+		qGr.setValue('device', deviceGr.getDisplayValue());
+		qGr.setValue('payload', this._makePayload(deviceGr, payload, qGr.getDisplayValue()));
+		qGr.insert();
+
+		return qGr.getDisplayValue();
+	},
+
+	_makePayload : function(deviceGr, payload, number) {
+
+		var answer = JSON.parse(payload);
+
+		answer.device = deviceGr.getDisplayValue();
+		answer.source = number;
+
+		return JSON.stringify(answer);
+	},
+
+	createOutputByDSN : function(dsn, clickType) {
+
+		var list = [];
+		var devGr = new GlideRecord(DEVICE_TABLE);
+
+		devGr.addQuery('dsn', dsn);
+		devGr.addQuery('active', true);
+		devGr.addQuery('click_type', clickType);
+		devGr.query();
+		gs.info('createOutputByDSN: q=' + devGr.getEncodedQuery());
+
+		while (devGr.next()) {
+			list.push(this.createOutput(devGr));
+		}
+
+		return list;
+
+	},
+
+	type: 'Util'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2019-04-01 19:06:42</sys_created_on>
+        <sys_id>ca0b9b29582033007f441d9b88607053</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Util</sys_name>
+        <sys_package display_value="CCW1655" source="x_snc_ccw1655">07aa9329582033007f441d9b8860703d</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="CCW1655">07aa9329582033007f441d9b8860703d</sys_scope>
+        <sys_update_name>sys_script_include_ca0b9b29582033007f441d9b88607053</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2019-04-01 19:06:42</sys_updated_on>
+    </sys_script_include>
+</record_update>
